@@ -8,6 +8,7 @@
   "dependencies": {
     "@zohocrm/nodejs-sdk-2.0": "^6.1.0",
     "axis": "^1.0.0",
+    "cors": "^2.8.6",
     "dotenv": "^17.2.4",
     "express": "^4.18.2"
   }
