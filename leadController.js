@@ -6,6 +6,7 @@ const { APIException } = require('@zohocrm/nodejs-sdk-2.0/core/com/zoho/crm/api/
 const ZCRMRecord = require('@zohocrm/nodejs-sdk-2.0/core/com/zoho/crm/api/record/record').Record;
 const { ParameterMap } = require('@zohocrm/nodejs-sdk-2.0/routes/parameter_map');
 const { Choice } = require('@zohocrm/nodejs-sdk-2.0/utils/util/choice');
+const { ResponseWrapper } = require('@zohocrm/nodejs-sdk-2.0/core/com/zoho/crm/api/record/response_wrapper');
 
 const MODULE_NAME = 'Leads';
 
@@ -37,7 +38,7 @@ function validateRequiredFields(data) {
 function buildRecord(data) {
   const record = new ZCRMRecord();
   const picklistFields = ['Lead_Status', 'Location', 'Nationality', 'Lead_Source'];
-  
+
   Object.keys(data).forEach(key => {
     if (fieldMapping[key]) {
       const value = picklistFields.includes(key) ? new Choice(data[key]) : data[key];
@@ -50,7 +51,7 @@ function buildRecord(data) {
 async function createLead(req, res) {
   try {
     validateRequiredFields(req.body);
-    
+
     const record = buildRecord(req.body);
     const request = new BodyWrapper();
     request.setData([record]);
@@ -60,13 +61,13 @@ async function createLead(req, res) {
 
     if (response) {
       const responseObject = response.getObject();
-      
+
       if (responseObject instanceof ActionWrapper) {
         const records = responseObject.getData();
-        
+
         if (records && records.length > 0) {
           const record = records[0];
-          
+
           if (record instanceof SuccessResponse) {
             const details = record.getDetails();
             return res.json({
@@ -101,8 +102,8 @@ async function updateLead(req, res) {
     }
 
     const record = buildRecord(req.body);
-    record.setId(id);
-    
+    record.setId(BigInt(id));
+
     const request = new BodyWrapper();
     request.setData([record]);
 
@@ -145,7 +146,7 @@ async function deleteLead(req, res) {
 
     const recordOperations = new RecordOperations();
     const paramInstance = new ParameterMap();
-    const response = await recordOperations.deleteRecords(MODULE_NAME, [id], paramInstance);
+    const response = await recordOperations.deleteRecords(MODULE_NAME, [BigInt(id)], paramInstance);
 
     if (response) {
       const responseObject = response.getObject();
@@ -173,4 +174,96 @@ async function deleteLead(req, res) {
   }
 }
 
-module.exports = { createLead, updateLead, deleteLead };
+async function getLeads(req, res) {
+  try {
+    const recordOperations = new RecordOperations();
+    const paramInstance = new ParameterMap();
+
+    // Check for page and per_page query params
+    // if (req.query.page) await paramInstance.add(GetRecordsParam.PAGE, req.query.page);
+    // if (req.query.per_page) await paramInstance.add(GetRecordsParam.PER_PAGE, req.query.per_page);
+
+    const response = await recordOperations.getRecords(MODULE_NAME, paramInstance);
+
+    if (response) {
+      const responseObject = response.getObject();
+
+      if (responseObject instanceof ResponseWrapper) {
+        const records = responseObject.getData();
+        const data = records.map(record => {
+          const result = {};
+          // Handle ID (potentially BigInt)
+          const id = record.getId();
+          result.id = typeof id === 'bigint' ? id.toString() : id;
+
+          record.getKeyValues().forEach((value, key) => {
+            // Handle BigInt values in fields
+            result[key] = typeof value === 'bigint' ? value.toString() : value;
+          });
+          return result;
+        });
+
+        return res.json({ success: true, data });
+      } else if (responseObject instanceof APIException) {
+        return res.status(400).json({
+          success: false,
+          error: responseObject.getMessage().getValue(),
+          details: responseObject.getDetails()
+        });
+      }
+    }
+
+    res.status(500).json({ success: false, error: 'No response from Zoho or unknown response type' });
+
+  } catch (error) {
+    console.error('Get Leads Error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+}
+
+async function getLead(req, res) {
+  try {
+    const { id } = req.params;
+    if (!id) {
+      return res.status(400).json({ success: false, error: 'Lead ID is required' });
+    }
+
+    const recordOperations = new RecordOperations();
+    const paramInstance = new ParameterMap();
+    const response = await recordOperations.getRecord(MODULE_NAME, id, paramInstance);
+
+    if (response) {
+      const responseObject = response.getObject();
+
+      if (responseObject instanceof ResponseWrapper) {
+        const records = responseObject.getData();
+        if (records.length > 0) {
+          const record = records[0];
+          const result = {};
+
+          const id = record.getId();
+          result.id = typeof id === 'bigint' ? id.toString() : id;
+
+          record.getKeyValues().forEach((value, key) => {
+            result[key] = typeof value === 'bigint' ? value.toString() : value;
+          });
+          return res.json({ success: true, data: result });
+        }
+      } else if (responseObject instanceof APIException) {
+        return res.status(400).json({
+          success: false,
+          error: responseObject.getMessage().getValue(),
+          details: responseObject.getDetails()
+        });
+      }
+    }
+
+    res.status(404).json({ success: false, error: 'Lead not found' });
+
+  } catch (error) {
+    console.error('Get Lead Error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+}
+
+module.exports = { createLead, updateLead, deleteLead, getLeads, getLead };

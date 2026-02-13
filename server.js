@@ -2,7 +2,7 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const { initializeZohoSDK } = require('./zohoClient');
-const { createLead, updateLead, deleteLead } = require('./leadController');
+const { createLead, updateLead, deleteLead, getLeads, getLead } = require('./leadController');
 
 const app = express();
 
@@ -11,6 +11,8 @@ app.use(cors({ origin: 'http://localhost:3001' }));
 app.use(express.json());
 
 app.post('/leads', createLead);
+app.get('/leads', getLeads);
+app.get('/leads/:id', getLead);
 app.put('/leads/:id', updateLead);
 app.delete('/leads/:id', deleteLead);
 
